@@ -1,12 +1,12 @@
 from collections.abc import Iterator
 from datetime import UTC, date, datetime, time, timedelta, timezone
+from uuid import UUID
 
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
-from app.models import ClickEvent, Profile, ProfileVisit
-from app.repositories import events, links
+from app.models import ClickEvent, ProfileVisit
+from app.repositories import events, vas
 from app.schemas.analytics import (
     Activity,
     ClickEntry,
@@ -58,12 +58,12 @@ def _buckets(start: date, end: date, granularity: Granularity) -> Iterator[date]
 async def _series(
     db: AsyncSession,
     model: type[ClickEvent] | type[ProfileVisit],
-    profile: Profile,
+    va_id: UUID | None,
     granularity: Granularity,
     start: date,
     end: date,
 ) -> tuple[int, list[SeriesPoint]]:
-    counts = await events.series(db, model, profile.id, granularity, *_bounds(start, end))
+    counts = await events.series(db, model, va_id, granularity, *_bounds(start, end))
     by_day = {bucket.date(): count for bucket, count in counts.items()}
     # A period without events is a true zero, so it is returned rather than left out.
     points = [
@@ -73,36 +73,40 @@ async def _series(
     return sum(by_day.values()), points
 
 
-async def overview(db: AsyncSession, profile: Profile) -> OverviewOut:
-    visits = await events.count(db, ProfileVisit, profile.id)
-    clicks = await events.count(db, ClickEvent, profile.id)
-    link = await links.get_for_profile(db, profile.id)
+async def overview(db: AsyncSession, va_id: UUID | None) -> OverviewOut:
+    total_visits = await events.count(db, ProfileVisit, va_id)
+    total_clicks = await events.count(db, ClickEvent, va_id)
+    va_count, active_va_count = await vas.counts(db)
     activity = [
-        Activity(type=kind, occurred_at=row.occurred_at, referer_domain=row.referer_domain)
+        Activity(
+            type=kind,
+            va_username=row.va_username,
+            occurred_at=row.occurred_at,
+            referer_domain=row.referer_domain,
+        )
         for kind, model in (("click", ClickEvent), ("visit", ProfileVisit))
-        for row in await events.recent(db, model, profile.id, RECENT_LIMIT)
+        for row in await events.recent(db, model, va_id, RECENT_LIMIT)
     ]
     activity.sort(key=lambda a: a.occurred_at, reverse=True)
     return OverviewOut(
-        total_visits=visits,
-        total_clicks=clicks,
-        conversion_rate=round(clicks / visits, 4) if visits else None,
-        profile_is_active=profile.is_active,
-        link_is_active=bool(link and link.is_active),
-        public_url=f"{settings.frontend_origin}/{profile.username}",
+        total_visits=total_visits,
+        total_clicks=total_clicks,
+        conversion_rate=round(total_clicks / total_visits, 4) if total_visits else None,
+        va_count=va_count,
+        active_va_count=active_va_count,
         recent_activity=activity[:RECENT_LIMIT],
     )
 
 
 async def visits(
     db: AsyncSession,
-    profile: Profile,
+    va_id: UUID | None,
     granularity: Granularity,
     start: date | None,
     end: date | None,
 ) -> VisitsOut:
     first, last = _resolve_range(start, end)
-    total, series = await _series(db, ProfileVisit, profile, granularity, first, last)
+    total, series = await _series(db, ProfileVisit, va_id, granularity, first, last)
     return VisitsOut(
         granularity=granularity, timezone=events.TIMEZONE, total=total, series=series
     )
@@ -110,7 +114,7 @@ async def visits(
 
 async def clicks(
     db: AsyncSession,
-    profile: Profile,
+    va_id: UUID | None,
     granularity: Granularity,
     start: date | None,
     end: date | None,
@@ -118,8 +122,8 @@ async def clicks(
     offset: int,
 ) -> ClicksOut:
     first, last = _resolve_range(start, end)
-    total, series = await _series(db, ClickEvent, profile, granularity, first, last)
-    rows = await events.click_history(db, profile.id, *_bounds(first, last), limit, offset)
+    total, series = await _series(db, ClickEvent, va_id, granularity, first, last)
+    rows = await events.click_history(db, va_id, *_bounds(first, last), limit, offset)
     return ClicksOut(
         granularity=granularity,
         timezone=events.TIMEZONE,
@@ -127,6 +131,7 @@ async def clicks(
         series=series,
         history=[
             ClickEntry(
+                va_username=row.va_username,
                 clicked_at=row.clicked_at,
                 referer_domain=row.referer_domain,
                 user_agent=row.user_agent,

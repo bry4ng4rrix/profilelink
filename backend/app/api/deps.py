@@ -5,10 +5,11 @@ from typing import Annotated
 from fastapi import Cookie, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.db import get_db
 from app.core.security import hash_ip, hash_token
-from app.models import AuthSession, Profile
-from app.repositories import profiles, sessions
+from app.models import AuthSession
+from app.repositories import sessions
 
 COOKIE_NAME = "pl_session"
 USER_AGENT_LIMIT = 512
@@ -29,11 +30,9 @@ async def current_session(
 CurrentSession = Annotated[AuthSession, Depends(current_session)]
 
 
-async def current_profile(db: Db, session: CurrentSession) -> Profile:
-    return await profiles.get_by_user(db, session.user_id)
-
-
-CurrentProfile = Annotated[Profile, Depends(current_profile)]
+def require_registration_enabled() -> None:
+    if not settings.registration_token:
+        raise HTTPException(404, "not_found")
 
 
 @dataclass(frozen=True)

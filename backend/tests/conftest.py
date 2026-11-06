@@ -1,7 +1,9 @@
+import asyncio
 import os
 import socket
 import tempfile
 from collections.abc import AsyncIterator, Awaitable, Callable
+from io import BytesIO
 
 os.environ.update(
     ENVIRONMENT="test",
@@ -20,32 +22,54 @@ import httpx  # noqa: E402
 import pytest  # noqa: E402
 from alembic import command  # noqa: E402
 from alembic.config import Config  # noqa: E402
-from sqlalchemy import text  # noqa: E402
+from PIL import Image  # noqa: E402
+from sqlalchemy import pool, text  # noqa: E402
+from sqlalchemy.ext.asyncio import create_async_engine  # noqa: E402
 
+from app.cli import create_admin  # noqa: E402
 from app.core.config import settings  # noqa: E402
 from app.core.db import engine  # noqa: E402
 from app.main import app  # noqa: E402
 from app.services import destinations, revalidate  # noqa: E402
 
-PASSWORD = "correct-horse-battery"
+ADMIN_EMAIL = "admin@example.com"
+ADMIN_PASSWORD = "correct-horse-battery"
 BASE_URL = "http://api.profil.test"
+DESTINATION = "https://destination.example.com/page"
+INSTAGRAM = "https://www.instagram.com/bryan.rakoto"
 
 Client = httpx.AsyncClient
-OwnerFactory = Callable[..., Awaitable[Client]]
+ADMIN = "/api/v1/admin/vas"
+
+
+def alembic_config() -> Config:
+    return Config("alembic.ini")
+
+
+async def _empty_schema() -> None:
+    target = create_async_engine(settings.database_url, poolclass=pool.NullPool)
+    async with target.begin() as connection:
+        await connection.execute(text("DROP SCHEMA public CASCADE"))
+        await connection.execute(text("CREATE SCHEMA public"))
+    await target.dispose()
+
+
+def reset_database() -> None:
+    assert settings.database_url.endswith("_test"), "refusing to wipe a non-test database"
+    asyncio.run(_empty_schema())
 
 
 @pytest.fixture(scope="session", autouse=True)
 def migrated_database():
-    config = Config("alembic.ini")
-    command.downgrade(config, "base")
-    command.upgrade(config, "head")
+    reset_database()
+    command.upgrade(alembic_config(), "head")
 
 
 @pytest.fixture(autouse=True)
 async def clean_database() -> AsyncIterator[None]:
     yield
     async with engine.begin() as connection:
-        await connection.execute(text("TRUNCATE users CASCADE"))
+        await connection.execute(text("TRUNCATE users, va_profiles CASCADE"))
 
 
 @pytest.fixture(autouse=True)
@@ -73,63 +97,65 @@ def revalidated(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, ...]]:
     return calls
 
 
-def _client(**headers: str) -> Client:
+def client(**headers: str) -> Client:
     return httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app, client=("203.0.113.7", 1234)),
         base_url=BASE_URL,
-        headers={"Origin": settings.frontend_origin, **headers},
+        headers=headers,
         follow_redirects=False,
     )
 
 
 @pytest.fixture
 async def visitor() -> AsyncIterator[Client]:
-    """No cookie, and no Origin header either: this is a plain browser navigation."""
-    async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=app, client=("203.0.113.7", 1234)),
-        base_url=BASE_URL,
-        follow_redirects=False,
-    ) as client:
-        yield client
+    """No cookie and no Origin header: a plain browser navigation."""
+    async with client() as instance:
+        yield instance
 
 
 @pytest.fixture
 async def anonymous() -> AsyncIterator[Client]:
-    """Sends the allowed Origin but no session."""
-    async with _client() as client:
-        yield client
+    """Sends the allowed Origin, but has no session."""
+    async with client(Origin=settings.frontend_origin) as instance:
+        yield instance
 
 
 @pytest.fixture
-async def owner_factory() -> AsyncIterator[OwnerFactory]:
-    clients: list[Client] = []
-
-    async def create(username: str = "bryan", email: str | None = None) -> Client:
-        client = _client()
-        clients.append(client)
-        response = await client.post(
-            "/api/v1/auth/register",
-            json={
-                "email": email or f"{username}@example.com",
-                "password": PASSWORD,
-                "password_confirm": PASSWORD,
-                "username": username,
-            },
+async def admin() -> AsyncIterator[Client]:
+    await create_admin(ADMIN_EMAIL, ADMIN_PASSWORD)
+    async with client(Origin=settings.frontend_origin) as instance:
+        response = await instance.post(
+            "/api/v1/auth/login", json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD}
         )
-        assert response.status_code == 201, response.text
-        return client
-
-    yield create
-    for client in clients:
-        await client.aclose()
+        assert response.status_code == 200, response.text
+        yield instance
 
 
-@pytest.fixture
-async def owner(owner_factory: OwnerFactory) -> Client:
-    return await owner_factory()
+def image_bytes(fmt: str = "PNG", size: tuple[int, int] = (800, 600), **options) -> bytes:
+    output = BytesIO()
+    Image.new("RGB", size, "red").save(output, fmt, **options)
+    return output.getvalue()
 
 
-async def add_link(client: Client, url: str = "https://destination.example.com/page") -> dict:
-    response = await client.post("/api/v1/owner/links", json={"destination_url": url})
+def photo_file(data: bytes | None = None, content_type: str = "image/png") -> tuple:
+    return ("photo.png", image_bytes() if data is None else data, content_type)
+
+
+async def post_va(admin: Client, photo: bytes | None = None, **fields) -> httpx.Response:
+    values = {
+        "first_name": "Bryan",
+        "last_name": "Rakoto",
+        "age": 27,
+        "instagram_url": INSTAGRAM,
+        "destination_url": DESTINATION,
+    } | fields
+    return await admin.post(ADMIN, data=values, files={"photo": photo_file(photo)})
+
+
+CreateVa = Callable[..., Awaitable[dict]]
+
+
+async def create_va(admin: Client, **fields) -> dict:
+    response = await post_va(admin, **fields)
     assert response.status_code == 201, response.text
     return response.json()

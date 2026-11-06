@@ -1,5 +1,6 @@
 import logging
 import time
+from urllib.parse import urlsplit
 
 from fastapi import Depends, FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -9,7 +10,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api import auth, owner_analytics, owner_links, owner_profile, public, redirect
+from app.api import admin_analytics, admin_vas, auth, public, redirect, register
 from app.core.config import settings
 from app.core.db import get_db
 from app.core.logging import configure_logging
@@ -21,8 +22,16 @@ settings.media_dir.mkdir(parents=True, exist_ok=True)
 _docs = {"docs_url": None, "redoc_url": None, "openapi_url": None} if settings.is_production else {}
 app = FastAPI(title="ProfileLink API", **_docs)
 
-_COOKIE_PATHS = ("/api/v1/auth/", "/api/v1/owner/")
+_COOKIE_PATHS = ("/api/v1/auth/", "/api/v1/admin/")
 _SAFE_METHODS = ("GET", "HEAD", "OPTIONS")
+
+
+def _origin_allowed(request: Request) -> bool:
+    origin = request.headers.get("origin")
+    if origin == settings.frontend_origin:
+        return True
+    # A same-origin request cannot be CSRF: this is how Swagger calls the API.
+    return bool(origin) and urlsplit(origin).netloc == request.headers.get("host")
 
 
 @app.middleware("http")
@@ -32,7 +41,7 @@ async def require_allowed_origin(request: Request, call_next) -> Response:
     if (
         request.method not in _SAFE_METHODS
         and request.url.path.startswith(_COOKIE_PATHS)
-        and request.headers.get("origin") != settings.frontend_origin
+        and not _origin_allowed(request)
     ):
         return JSONResponse({"detail": "origin_not_allowed"}, status_code=403)
     return await call_next(request)
@@ -63,7 +72,7 @@ app.add_middleware(
     max_age=600,
 )
 
-for module in (auth, public, redirect, owner_profile, owner_links, owner_analytics):
+for module in (auth, public, redirect, register, admin_vas, admin_analytics):
     app.include_router(module.router)
 
 

@@ -8,7 +8,7 @@ from app.api.deps import Db, event_context
 from app.core.config import settings
 from app.core.usernames import normalize_username
 from app.models import ClickEvent
-from app.repositories.profiles import get_redirect_target
+from app.repositories.vas import get_redirect_target
 
 router = APIRouter(tags=["redirect"])
 logger = logging.getLogger(__name__)
@@ -31,7 +31,7 @@ async def redirect(username: str, request: Request, db: Db, ref: str | None = No
     context = event_context(request, ref)
     db.add(
         ClickEvent(
-            profile_id=target.id,
+            va_profile_id=target.id,
             referer_domain=context.referer_domain,
             user_agent=context.user_agent,
             ip_hash=context.ip_hash,

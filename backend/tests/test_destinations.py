@@ -1,8 +1,9 @@
 import pytest
+from sqlalchemy import select
 
-from tests.conftest import add_link
-
-LINKS = "/api/v1/owner/links"
+from app.core.db import SessionLocal
+from app.models import VaProfile
+from tests.conftest import ADMIN, create_va, post_va
 
 REFUSED = [
     # Dangerous schemes
@@ -14,7 +15,6 @@ REFUSED = [
     "gopher://example.com/",
     "vbscript:msgbox(1)",
     # Malformed
-    "",
     "   ",
     "not a url",
     "example.com",
@@ -86,38 +86,40 @@ ACCEPTED = [
 
 
 @pytest.mark.parametrize("url", REFUSED)
-async def test_refused_on_create(owner, url):
-    response = await owner.post(LINKS, json={"destination_url": url})
+async def test_refused_on_create(admin, url):
+    response = await post_va(admin, destination_url=url)
 
     assert response.status_code == 422, url
     assert response.json()["detail"] == "invalid_destination"
+    async with SessionLocal() as db:
+        assert await db.scalar(select(VaProfile)) is None
 
 
 @pytest.mark.parametrize("url", ["javascript:alert(1)", "http://127.0.0.1/", "http://localhost/"])
-async def test_refused_on_update(owner, url):
-    link = await add_link(owner)
+async def test_refused_on_update(admin, url):
+    va = await create_va(admin)
 
-    response = await owner.put(f"{LINKS}/{link['id']}", json={"destination_url": url})
+    response = await admin.put(f"{ADMIN}/{va['id']}/link", json={"destination_url": url})
 
     assert response.status_code == 422
-    assert (await owner.get(LINKS)).json()[0]["destination_url"] == link["destination_url"]
+    body = (await admin.get(f"{ADMIN}/{va['id']}")).json()
+    assert body["link"]["destination_url"] == va["link"]["destination_url"]
 
 
 @pytest.mark.parametrize("url", ACCEPTED)
-async def test_accepted(owner, url):
-    response = await owner.post(LINKS, json={"destination_url": url})
+async def test_accepted(admin, url):
+    va = await create_va(admin, destination_url=url)
 
-    assert response.status_code == 201, url
-    assert response.json()["destination_url"] == url
-
-
-async def test_international_domain_is_stored_as_punycode(owner):
-    link = await add_link(owner, "https://bücher.example.com:8443/livre?x=1#y")
-
-    assert link["destination_url"] == "https://xn--bcher-kva.example.com:8443/livre?x=1#y"
+    assert va["link"]["destination_url"] == url
 
 
-async def test_surrounding_spaces_are_removed(owner):
-    link = await add_link(owner, "  https://example.com/  ")
+async def test_international_domain_is_stored_as_punycode(admin):
+    va = await create_va(admin, destination_url="https://bücher.example.com:8443/livre?x=1#y")
 
-    assert link["destination_url"] == "https://example.com/"
+    assert va["link"]["destination_url"] == "https://xn--bcher-kva.example.com:8443/livre?x=1#y"
+
+
+async def test_surrounding_spaces_are_removed(admin):
+    va = await create_va(admin, destination_url="  https://example.com/  ")
+
+    assert va["link"]["destination_url"] == "https://example.com/"

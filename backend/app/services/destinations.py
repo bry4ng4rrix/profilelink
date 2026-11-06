@@ -11,10 +11,16 @@ from app.core.config import settings
 MAX_LENGTH = 2048
 DNS_TIMEOUT_SECONDS = 3
 _LOCAL_SUFFIXES = ("localhost", "local", "internal", "intranet", "lan", "home.arpa")
+_INSTAGRAM_HOSTS = ("instagram.com", "www.instagram.com")
 
 
 def _invalid() -> HTTPException:
     return HTTPException(422, "invalid_destination")
+
+
+def _has_unsafe_characters(url: str) -> bool:
+    # urlsplit silently drops tabs and newlines, and browsers read a backslash as a slash.
+    return any(c <= " " or c in "\x7f\\" for c in url)
 
 
 def _is_public(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
@@ -48,8 +54,7 @@ async def resolve_host(host: str, port: int) -> list[str]:
 async def validate(raw: str) -> str:
     """Return the normalised URL or refuse it. The API itself never requests the destination."""
     url = raw.strip()
-    # urlsplit silently drops tabs and newlines, and browsers read a backslash as a slash.
-    if not url or len(url) > MAX_LENGTH or any(c <= " " or c in "\x7f\\" for c in url):
+    if not url or len(url) > MAX_LENGTH or _has_unsafe_characters(url):
         raise _invalid()
     try:
         parts = urlsplit(url)
@@ -83,3 +88,26 @@ async def validate(raw: str) -> str:
         return url
     netloc = f"{host}:{port}" if port else host
     return urlunsplit(parts._replace(netloc=netloc))
+
+
+def validate_instagram(raw: str) -> str:
+    """Parses the host instead of matching text: instagram.com@evil.test is a real trap."""
+    url = raw.strip()
+    invalid = HTTPException(422, "invalid_instagram")
+    if len(url) > MAX_LENGTH or _has_unsafe_characters(url):
+        raise invalid
+    try:
+        parts = urlsplit(url)
+        port = parts.port
+    except ValueError as exc:
+        raise invalid from exc
+    if (
+        parts.scheme.lower() not in ("http", "https")
+        or (parts.hostname or "").lower() not in _INSTAGRAM_HOSTS
+        or parts.username is not None
+        or parts.password is not None
+        or port is not None
+        or not parts.path.strip("/")
+    ):
+        raise invalid
+    return url

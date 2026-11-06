@@ -1,4 +1,4 @@
-# Local development and tests only. Bound to localhost; the password is not a secret.
+# Local development and tests only. Bound to localhost; the database password is not a secret.
 name: profilelink-dev
 services:
   postgres:
@@ -17,5 +17,27 @@ services:
       interval: 2s
       timeout: 3s
       retries: 20
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    env_file: .env
+    # Shares the host network: `next dev` runs on the host, and UFW refuses calls coming from
+    # a Docker bridge, so the API could not purge the page cache otherwise.
+    network_mode: host
+    command: ["sh", "-c", "alembic upgrade head && exec uvicorn app.main:app --host 127.0.0.1 --port 8000"]
+    volumes:
+      - media:/app/media
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://localhost:8000/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
 volumes:
   pgdata:
+  media:

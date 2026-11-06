@@ -1,109 +1,129 @@
 # Roadmap — ProfileLink
 
-> Mise à jour : 2026-11-06. **Phase en cours : 1, en attente de validation.**
+> Mise à jour : 2026-11-06. **Phase en cours : 6.5, déploiement en attente des informations VPS et domaine.**
 > Ce fichier est mis à jour à la fin de chaque phase. On ne passe à la phase suivante que si ses tests essentiels réussissent.
 
 | Phase | Objectif | Statut |
 |---|---|---|
-| 1 | Analyse et architecture | Documents livrés, **validation attendue** |
-| 2 | Backend | À faire |
-| 3 | Frontend | À faire |
-| 4 | SEO et sécurité | À faire |
-| 5 | Production | À faire |
+| 1 | Analyse et architecture | Terminée |
+| 2 | Backend | Terminée |
+| 3 | Frontend | Terminée |
+| 4 | SEO et sécurité | Terminée, sauf validation Meta |
+| 5 | Production | Validée en local, **pas déployée** |
+| 6 | Refonte administrateur/VA | Développée et testée, **pas déployée** |
 
-## Phase 1 — Analyse et architecture
+Les phases 2 à 5 ont été réalisées sur le modèle à inscription libre, remplacé par la phase 6.
+État des tests : 298 tests pytest, 70 tests Playwright.
 
-- [x] Examiner le répertoire de travail et l'existant
-- [x] Vérifier le comportement de Next 16.4 sur un prototype (Open Graph, statut 404, invalidation)
-- [x] `ARCHITECTURE.md`
-- [x] `DATABASE_SCHEMA.md`
-- [x] `API_DOCUMENTATION.md`
-- [x] `ROADMAP.md`
-- [ ] **Validation des décisions V1 à V7** ([ARCHITECTURE.md](ARCHITECTURE.md#8-décisions-à-valider))
+## Phase 6 — Refonte administrateur/VA
 
-## Phase 2 — Backend
+### 6.0 Conception
 
-Mise en place :
+- [x] Inspection de l'existant
+- [x] Inventaire : conservé, modifié, supprimé, ajouté ([détails](ARCHITECTURE.md#3-inventaire-de-lexistant))
+- [x] Base de référence verte : 190 tests pytest, 56 tests Playwright
+- [x] `ARCHITECTURE.md`, `DATABASE_SCHEMA.md`, `API_DOCUMENTATION.md`, `ROADMAP.md`
+- [x] Validation de la conception, décisions A1 à A3 et A5 à A11 ([ARCHITECTURE.md](ARCHITECTURE.md#10-décisions))
 
-- [ ] Réorganiser le dépôt : `backend/`, git à la racine, `.gitignore`, `.env.example` (après V1)
-- [ ] Recréer le venv, renseigner `requirements.txt` et `.env`
-- [ ] Configurer PostgreSQL de développement (Compose), SQLAlchemy async, Alembic
-- [ ] Logs JSON structurés, sans IP brute ni destination
+### 6.1 Données et authentification
 
-Fonctionnalités :
+- [x] Migration `0002` avec garde-fou sur les données existantes
+- [x] Modèles `VaProfile`, `VaExternalLink`
+- [x] Suppression de l'inscription
+- [x] `app/cli.py` : `create-admin`, `reset-password`
+- [x] Tests : aller-retour de migration, `alembic check`, garde-fou, CLI, route d'inscription absente
 
-- [ ] Modèles et migration initiale
-- [ ] Authentification : register, login, logout, refresh, me, contrôle d'`Origin`
-- [ ] Profils : public, propriétaire, statut
-- [ ] Upload et réencodage des photos
-- [ ] Liens : CRUD, statut, validation des destinations
-- [ ] Redirection `/r/{username}` et enregistrement des clics
-- [ ] Enregistrement des visites et sitemap
-- [ ] Statistiques
-- [ ] Appel d'invalidation vers Next
+### 6.2 API d'administration
 
-Tests pytest, à faire réussir avant la phase 3 :
+- [x] Génération de l'URL publique
+- [x] `/api/v1/admin/vas` : création atomique, liste, lecture, modification, suppression, photo, statut, lien
+- [x] Statistiques globales et par VA
+- [x] Champ `age` sur la route publique
+- [x] Préfixe protégé dans `main.py` et Nginx
 
-- [ ] Inscription, connexion, sessions expirées et révoquées
-- [ ] Permissions et isolation entre propriétaires
-- [ ] CRUD profils et liens
-- [ ] Redirection 302, profil désactivé, lien désactivé, `Cache-Control: no-store`
-- [ ] Destinations invalides : toute la table de validation
-- [ ] Absence de `destination_url` et d'`email` sur **tous** les endpoints publics
-- [ ] Accès public sans cookie, accès non autorisé
-- [ ] CORS et contrôle d'`Origin`
-- [ ] `alembic upgrade head` sur base vide, puis `alembic check`
+Tests pytest à faire réussir :
 
-## Phase 3 — Frontend
+- [x] Génération d'URL : conflits, accents, prénoms courts, noms réservés
+- [x] Création atomique : un lien ou une photo invalide ne laisse aucun VA
+- [x] Accès anonyme et cookie forgé refusés sur **toutes** les routes `/admin/*`
+- [x] Destination absente de **toutes** les routes publiques
+- [x] Email administrateur absent de toutes les routes publiques
+- [x] VA désactivé : aucune donnée personnelle exposée
+- [x] Âge hors de 1 à 120 refusé
+- [x] Suppression : lien, statistiques et photo effacés, page en 404 immédiat
 
-- [ ] Ajouter `react-hook-form`, `@hookform/resolvers`, `zod`, `@tanstack/react-query`, `@playwright/test`
-- [ ] Ajuster `next.config.ts` et `app/layout.tsx` ([détails](ARCHITECTURE.md#9-choix-techniques))
-- [ ] Design system : tokens, typographie, composants partagés
-- [ ] Couche `fetch` centralisée et `proxy.ts`
-- [ ] Page publique `/[username]` et ses états : actif, introuvable, désactivé, lien indisponible
-- [ ] `/register`, `/login`
-- [ ] `/dashboard`, `/dashboard/profile`, `/dashboard/links`, `/dashboard/analytics`
-- [ ] Pages 404 et erreurs, états vides, skeletons
-- [ ] Route `/api/revalidate`
+### 6.3 Dashboard
 
-Tests Playwright sur la pile réelle :
+- [x] `/dashboard/vas` : photo, nom complet, email, URL, copier, consulter
+- [x] `/dashboard/vas/new`, `/dashboard/vas/[id]`
+- [x] Statistiques avec filtre par VA
+- [x] Vue d'ensemble globale
+- [x] Retrait de `/dashboard/profile` et `/dashboard/links`
 
-- [ ] Formulaires et messages d'erreur
-- [ ] Profils publics et bouton de redirection
-- [ ] Dashboard : parcours complet
-- [ ] États d'erreur
-- [ ] Responsive : mobile, tablette, bureau
+### 6.4 Pages publiques
 
-## Phase 4 — SEO et sécurité
+- [x] Page VA : photo, prénom, nom, âge, bouton
+- [x] `/` vers la connexion, 404 et `/conditions` sans inscription
+- [x] Retrait de `/register`
+- [x] `noindex` sur les pages, sitemap retiré
 
-- [ ] `generateMetadata`, Open Graph, URL canonique, `noindex` pour les profils désactivés
-- [ ] `sitemap.xml` et `robots.txt`
-- [ ] Test : OG dans le `<head>` et vrai 404 pour tous les User-Agents, sur cache froid
-- [ ] Test : aucune destination dans le HTML, le JSON ni les métadonnées
-- [ ] En-têtes de sécurité : CSP, HSTS, `X-Content-Type-Options`, `Referrer-Policy`
-- [ ] `SECURITY.md`
-- [ ] Revue de sécurité de l'ensemble
+Tests Playwright à faire réussir :
 
-## Phase 5 — Production
+- [x] Parcours complet : connexion, création d'un VA, page publique, clic, statistiques
+- [x] Aucune trace d'inscription sur l'accueil, `/register` en 404
+- [x] Aucune destination dans le HTML, les métadonnées, le JavaScript ou le JSON public
+- [x] Âge absent d'Open Graph
+- [x] Lien Instagram absent de la page, du JSON et du JavaScript publics
+- [x] Modification visible immédiatement sur la page publique
+- [x] Responsive sur tous les écrans du dashboard
 
-Rien n'est modifié sur le VPS sans autorisation.
+### 6.5 Mise en production
 
-- [ ] Dockerfiles backend et frontend (`standalone`)
-- [ ] `docker-compose.yml` : réseaux privés, volumes, healthchecks, redémarrage, Postgres sans port publié
-- [ ] Nginx : hôtes, IP réelle, rate limiting, `/media`, blocage de `/api/` sur `profil.mg`
-- [ ] Cloudflare : DNS, Full (strict), Authenticated Origin Pulls, règles de cache
-- [ ] VPS : pare-feu, SSH, déploiement reproductible
-- [ ] Sauvegardes hors VPS `pg_dump` + `media`, **restauration testée**
-- [ ] `DEPLOYMENT.md`, `README.md`
-- [ ] Vérifications en production : redirection, cache, HTTPS, port Postgres fermé depuis Internet
-- [ ] Débogueur de partage Meta sur un vrai profil
+- [x] Reprise du test Docker complet sur le nouveau modèle
+- [x] `SECURITY.md`, `DEPLOYMENT.md`, `README.md`
+- [ ] Déploiement sur le VPS, **après réponse à A4 et autorisation explicite**
+- [ ] Vérifications en production, débogueur de partage Meta
 
-## Hors périmètre de la v1
+## Phases terminées
 
-Voir [ARCHITECTURE.md](ARCHITECTURE.md#10-hors-périmètre-de-la-v1).
+### Phase 2 — Backend
+
+- [x] FastAPI, SQLAlchemy async, Alembic, sessions, profils, liens, redirection, statistiques
+- [x] Tests pytest sur PostgreSQL 18, migration aller-retour, `alembic check`
+
+### Phase 3 — Frontend
+
+- [x] Design system, page publique et ses états, connexion, dashboard, graphiques
+- [x] Tests Playwright sur le build de production, mobile et bureau
+
+### Phase 4 — SEO et sécurité
+
+- [x] Métadonnées, Open Graph, canonique, `noindex` des profils désactivés, sitemap, robots
+- [x] CSP, `nosniff`, `Referrer-Policy`, HSTS
+- [ ] Validation réelle avec le débogueur de partage Meta
+
+### Phase 5 — Production
+
+Validé sur la pile Docker complète, en mode production, sur cette machine :
+
+- [x] Dockerfiles, Compose, réseaux privés, volumes, healthchecks
+- [x] Nginx : TLS, certificat client, IP réelle, rate limiting, `/media`, `/api/` bloqué sur `profil.mg`
+- [x] Accès direct à l'origine refusé, cookie `Secure`, usurpation d'IP sans effet, aucune destination dans les logs
+- [x] Sauvegarde et **restauration testées**, persistance après `down`/`up`, conteneur recréé retrouvé par Nginx
+
+Reste à faire, sur le VPS, en 6.5 :
+
+- [ ] Cloudflare, vrai certificat d'origine, pare-feu, SSH, copie des sauvegardes hors VPS
 
 ## Journal des décisions
 
 | Date | Décision |
 |---|---|
-| 2026-11-06 | Phase 1 : conception basée sur l'existant (Next 16.4, shadcn `base-nova`, FastAPI, Python 3.14). Cache Components conservé avec `htmlLimitedBots: /.*/`, après test sur prototype. |
+| 2026-11-06 | Conception basée sur l'existant (Next 16.4, shadcn `base-nova`, FastAPI, Python 3.14). Cache Components conservé avec `htmlLimitedBots: /.*/`, après test sur prototype. |
+| 2026-11-06 | Implémentation lancée sur les recommandations V1 à V4. `frontend/.git` conservé, car ce dépôt reçoit des commits en cours. Mot de passe oublié et Turnstile non implémentés, faute de fournisseur. |
+| 2026-11-06 | Passage au modèle administrateur/VA : plus d'inscription, les VA n'ont pas de compte. Conception validée. |
+| 2026-11-06 | Accueil remplacé par une redirection vers la connexion. Pages VA en `noindex`, sitemap retiré. Aucun âge minimum imposé, à la demande de l'utilisateur. |
+| 2026-11-06 | L'email des VA est remplacé par un lien Instagram privé, jamais affiché publiquement (migration `0003`). |
+| 2026-11-06 | Inscription administrateur ajoutée à FastAPI, visible dans Swagger et absente du frontend. Protégée par `REGISTRATION_TOKEN`, car tout compte est administrateur. |
+| 2026-11-06 | FastAPI passe dans Docker en développement (`docker-compose.dev.yml`), à la place d'uvicorn lancé à la main. |
+| 2026-11-06 | Base de développement `profilelink_va` créée : la migration `0002` a refusé `profilelink`, qui contenait un compte de test, conservé. |
