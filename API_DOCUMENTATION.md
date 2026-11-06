@@ -6,6 +6,7 @@
 
 - **Hôte :** `https://api.profil.mg`, préfixe `/api/v1`. Exceptions : `/r/{username}` et `/health`.
 - **Format :** JSON en UTF-8, dates ISO 8601 en UTC.
+- **Depuis le site :** le navigateur passe par `/backend`, limité à `/api/v1/auth/(login|logout|refresh|me)`, `/api/v1/public/*`, `/api/v1/admin/*`, `/r/*` et `/media/*`. `/docs`, `/health` et l'inscription n'y sont pas.
 - **Username :** insensible à la casse, normalisé en minuscules.
 - **Authentification :** cookie `pl_session` (`HttpOnly; Secure; SameSite=Lax; Domain=profil.mg`), réservé à l'administrateur.
 - **CORS :** origine `https://profil.mg` uniquement, avec `credentials`.
@@ -42,7 +43,7 @@ Public, sans authentification. Paramètre optionnel `ref`, domaine d'origine env
 
 | Situation | Réponse | Clic compté |
 |---|---|---|
-| VA et lien actifs | `302`, `Location: <destination>` | Oui |
+| VA et lien actifs | `302`, `Location: <destination>` | Oui, une fois par personne |
 | VA absent ou inactif | `302`, `Location: https://profil.mg/{username}` | Non |
 | Lien inactif | `302`, `Location: https://profil.mg/{username}` | Non |
 | Username de format invalide | `404` | Non |
@@ -59,6 +60,7 @@ X-Robots-Tag: noindex, nofollow
 
 - La destination vient **toujours** de PostgreSQL. Aucun paramètre de requête ne peut l'influencer.
 - `ref` est seulement stocké, après validation comme nom d'hôte.
+- Un clic n'est compté qu'une fois pour chaque VA : même IP ou même cookie `pl_visitor` (`HttpOnly`, un an, posé uniquement ici). La redirection part toujours.
 - La destination devient visible dans `Location` au moment de la redirection : aucun secret n'est promis après le clic.
 - Le `robots.txt` de `api.profil.mg` exclut `/r/` et `/api/`, pas `/media/` : les robots doivent pouvoir lire `og:image`.
 
@@ -70,7 +72,6 @@ Public. Réponse `200` pour un VA actif :
 
 ```json
 {
-  "id": "0b7e9a3e-1f55-4b7a-9d7e-3c1f9e2a4d10",
   "username": "bryan",
   "first_name": "Bryan",
   "last_name": "Rakoto",
@@ -87,7 +88,6 @@ Pour un VA désactivé, la réponse reste `200` et n'expose rien de personnel :
 
 ```json
 {
-  "id": "0b7e9a3e-1f55-4b7a-9d7e-3c1f9e2a4d10",
   "username": "bryan",
   "first_name": null,
   "last_name": null,
@@ -100,7 +100,7 @@ Pour un VA désactivé, la réponse reste `200` et n'expose rien de personnel :
 
 Username inconnu : `404`.
 
-**Ne contient jamais** `destination_url`, `instagram_url` ni l'identifiant du lien. Le schéma de réponse Pydantic est une liste blanche, et un test parcourt toutes les routes publiques pour le vérifier.
+**Ne contient jamais** `destination_url`, `instagram_url` ni aucun identifiant interne. Le schéma de réponse Pydantic est une liste blanche, et un test parcourt toutes les routes publiques pour le vérifier.
 
 ### `POST /api/v1/public/profiles/{username}/visit`
 

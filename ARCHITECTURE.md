@@ -22,6 +22,8 @@ ProfileLink publie les pages individuelles de VA (Virtual Assistants) à l'adres
                   (rendu, cache) ◀ invalidation ┘         (réseau privé, aucun port publié)
 ```
 
+Le navigateur n'appelle jamais l'API directement : il passe par `/backend` sur le site, que `next.config.ts` transmet à `BACKEND_URL` (valeur par défaut dans `lib/site.ts`). Une page HTTPS ne peut pas appeler une API HTTP, et le cookie de session doit rester sur un seul site. Le 302 de `/r/{username}` traverse ce chemin sans être suivi. Seules les routes utiles au navigateur y passent : `/docs`, `/health` et l'inscription restent sur l'adresse de l'API.
+
 Trois règles structurent le reste :
 
 1. **Les visiteurs n'ont jamais de compte.** Pages et redirection n'exigent ni cookie, ni JWT, ni CAPTCHA.
@@ -96,7 +98,7 @@ Ce qui a changé en passant de l'inscription libre au modèle administrateur/VA.
 | `api/admin_vas.py`, `api/admin_analytics.py`, `services/vas.py` | Gestion des VA |
 | `app/cli.py` | Création de l'administrateur et réinitialisation du mot de passe |
 | Migration Alembic `0002` | Passage au nouveau schéma |
-| `/dashboard/vas`, `/dashboard/vas/new`, `/dashboard/vas/[id]` | Liste, ajout, modification |
+| `/dashboard/vas`, `/dashboard/vas/new`, `/dashboard/vas/edit` | Liste, ajout, modification |
 
 ## 4. Structure du dépôt
 
@@ -169,6 +171,8 @@ GET /r/bryan ─▶ VA + lien actifs ? ─ non ─▶ 302 vers profil.mg/bryan (
 
 Si l'`INSERT` échoue, l'erreur est journalisée et la redirection part quand même.
 
+Un clic n'est compté qu'une fois par personne pour chaque VA : même IP, ou même navigateur grâce au cookie anonyme `pl_visitor`, posé uniquement au clic. La redirection part dans tous les cas.
+
 ### Modification par l'administrateur
 
 ```text
@@ -180,9 +184,9 @@ Si l'appel échoue, il est journalisé et le TTL de 5 minutes sert de filet. La 
 
 ### Authentification
 
-`/` ne contient aucune page : `proxy.ts` redirige vers `/login`, ou vers `/dashboard` si un cookie de session existe.
+`/` ne contient aucune page : `proxy.ts` redirige vers `/login`, ou vers `/dashboard` si la session est valide.
 
-Le navigateur appelle directement `api.profil.mg` avec `credentials: 'include'`. Le dashboard est fait de composants client avec TanStack Query. Next ne lit le cookie que dans `proxy.ts`, pour rediriger sans flash vers `/login` ; la vérification réelle reste dans FastAPI.
+Le dashboard est fait de composants client avec TanStack Query, qui appellent l'API par `/backend`. Avant de servir `/`, `/login` ou `/dashboard/*`, `proxy.ts` valide la session auprès de FastAPI : un cookie absent, faux ou expiré renvoie vers `/login`, et le cookie est effacé. Si l'API ne répond pas, le dashboard reste fermé. FastAPI vérifie toujours chaque appel, cette étape ne le remplace pas.
 
 ## 6. Décisions techniques
 
@@ -206,6 +210,8 @@ Le navigateur appelle directement `api.profil.mg` avec `credentials: 'include'`.
 - **D13. Âge hors des métadonnées.** Il apparaît sur la page, jamais dans Open Graph.
 - **D14. Pages non indexées.** `noindex, nofollow` sur chaque page, aucun sitemap. `robots.txt` les laisse accessibles, car un robot bloqué ne lirait ni le `noindex` ni les balises d'aperçu.
 - **D15. Relation vers le lien en `lazy="raise"`.** Si un chemin public tentait de lire la destination, il échouerait au lieu de la laisser fuiter.
+- **D17. Identifiants hors des URL du dashboard.** Le VA en cours de modification est gardé en `sessionStorage`, et `/dashboard/vas/edit` ne contient ni identifiant ni nom. C'est de la discrétion (historique, captures d'écran) et non un contrôle d'accès, qui reste assuré par FastAPI. Le JSON public ne contient plus d'UUID. Les pages publiques gardent le nom dans l'URL, conformément à la demande.
+- **D18. Un clic par personne et par VA.** Même `ip_hash` ou même `visitor_hash`. Le User-Agent n'est pas utilisé : des inconnus avec le même téléphone ont le même. Aucun identifiant d'appareil fiable n'existe sur le web.
 - **D16. Lien Instagram privé.** Obligatoire, affiché seulement dans le dashboard. Sa validation analyse l'hôte réel, car `instagram.com@evil.test` ou `instagram.com.evil.test` passeraient un simple contrôle de texte.
 
 ## 7. Comportement vérifié de Next 16.4
@@ -240,7 +246,8 @@ Mesures sur `/[username]` avec `use cache`, `next build` + `next start`, quatre 
 | Moyen | **Aucune garantie vis-à-vis de Meta.** Une redirection publique reste suivable, et la page visible peut être évaluée comme toute autre. | Aucune promesse de ce type dans le produit. Pas de cloaking. |
 | Moyen | **VPS unique.** | Sauvegardes hors VPS, restauration testée. |
 | Faible | **Réemploi d'une URL.** Après suppression d'un VA, son adresse redevient libre et les liens déjà publiés pointeraient vers le prochain VA homonyme. | Accepté en v1. |
-| Faible | **Statistiques indicatives.** Le beacon peut être bloqué ou forgé, et le taux clics/visites peut dépasser 100 %. | Affichage sans correction. |
+| Moyen | **Compteur de clics sous-estimé.** Les opérateurs mobiles et les Wi-Fi partagent une même IP entre beaucoup de personnes : seul le premier clic de cette IP compte pour chaque VA. | Conforme à la demande. Une fenêtre de temps ou le cookie seul réduiraient l'écart. |
+| Faible | **Statistiques indicatives.** Le beacon peut être bloqué ou forgé, une requête fabriquée à la main peut falsifier son IP et effacer le cookie, et le taux clics/visites peut dépasser 100 %. | Affichage sans correction. Les visites ne sont pas dédoublonnées. |
 | Faible | **Évolution de Next.** D2 repose sur le comportement actuel. | Tests Playwright sur OG et 404. |
 
 ## 10. Décisions
@@ -253,10 +260,11 @@ Mesures sur `/[username]` avec `use cache`, `next build` + `next start`, quatre 
 | A4 | VPS et domaine | **En attente de réponse**, nécessaire avant le déploiement. |
 | A5 | VA ou lien inactif sur `/r/` | 302 vers la page du VA |
 | A6 | Bouton | `<a>` |
-| A7 | Libellé | « Visiter le lien » |
+| A7 | Libellé | « Cliquer Ici » |
 | A8 | Supprimer un VA | Suppression définitive, avec ses statistiques et sa photo, après confirmation |
 | A9 | Administrateur | Créé par CLI, ou par Swagger ou la page FastAPI `/register` avec un code, plusieurs comptes possibles, pas de 2FA en v1 |
 | A10 | Page publique | Pas de bio ni de `@username`, « Signaler cette page » conservé |
+| A12 | Compteur de clics | Un clic par personne et par VA : même IP ou même navigateur |
 | A11 | Contact d'un VA | L'email est remplacé par un lien Instagram obligatoire, privé, non unique |
 
 ## 11. Choix techniques
@@ -268,7 +276,7 @@ Mesures sur `/[username]` avec `use cache`, `next build` + `next start`, quatre 
 | Données | PostgreSQL 18 |
 | Infra | Docker Compose (`frontend`, `backend`, `postgres`, `nginx`), Cloudflare. Migrations lancées par la commande du conteneur backend. |
 
-`NEXT_PUBLIC_API_URL` est figée à la compilation et passe en argument de `docker build`.
+`BACKEND_URL` est compilée dans la règle `/backend` : elle passe en argument de `docker build`.
 
 ## 12. Hors périmètre
 

@@ -2,7 +2,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import Row, func, select
+from sqlalchemy import Row, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import ClickEvent, ProfileVisit, VaProfile
@@ -17,6 +17,17 @@ def _time(model: Event):
 
 def _scope(model: Event, va_id: UUID | None) -> tuple:
     return () if va_id is None else (model.va_profile_id == va_id,)
+
+
+async def click_seen(
+    db: AsyncSession, va_id: UUID, ip_hash: str | None, visitor_hash: str
+) -> bool:
+    """Same network or same browser. The user agent is left out: it is shared by strangers."""
+    same_person = [ClickEvent.visitor_hash == visitor_hash]
+    if ip_hash:
+        same_person.append(ClickEvent.ip_hash == ip_hash)
+    stmt = select(ClickEvent.id).where(ClickEvent.va_profile_id == va_id, or_(*same_person)).limit(1)
+    return await db.scalar(stmt) is not None
 
 
 async def count(db: AsyncSession, model: Event, va_id: UUID | None) -> int:

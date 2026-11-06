@@ -153,6 +153,18 @@ def test_an_empty_token_means_disabled(value):
     assert Settings(registration_token=value).registration_token is None
 
 
+def test_a_trailing_slash_in_an_address_is_harmless():
+    configured = Settings(
+        frontend_origin="https://site.test/",
+        frontend_internal_url="https://site.test/",
+        api_public_url="https://site.test/backend/",
+    )
+
+    assert configured.frontend_origin == "https://site.test"
+    assert configured.frontend_internal_url == "https://site.test"
+    assert configured.api_public_url == "https://site.test/backend"
+
+
 def test_a_weak_token_stops_the_application_from_starting():
     with pytest.raises(ValidationError, match="32 characters"):
         Settings(registration_token="too-short")

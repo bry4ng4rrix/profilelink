@@ -16,7 +16,6 @@ def public_view(row: Row) -> PublicProfileOut:
     va = row.VaProfile
     if not va.is_active:
         return PublicProfileOut(
-            id=va.id,
             username=va.username,
             first_name=None,
             last_name=None,
@@ -26,7 +25,6 @@ def public_view(row: Row) -> PublicProfileOut:
             link_available=False,
         )
     return PublicProfileOut(
-        id=va.id,
         username=va.username,
         first_name=va.first_name,
         last_name=va.last_name,

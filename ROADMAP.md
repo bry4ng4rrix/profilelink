@@ -13,7 +13,7 @@
 | 6 | Refonte administrateur/VA | Développée et testée, **pas déployée** |
 
 Les phases 2 à 5 ont été réalisées sur le modèle à inscription libre, remplacé par la phase 6.
-État des tests : 312 tests pytest, 70 tests Playwright.
+État des tests : 327 tests pytest, 82 tests Playwright.
 
 ## Phase 6 — Refonte administrateur/VA
 
@@ -126,4 +126,9 @@ Reste à faire, sur le VPS, en 6.5 :
 | 2026-11-06 | L'email des VA est remplacé par un lien Instagram privé, jamais affiché publiquement (migration `0003`). |
 | 2026-11-06 | Inscription administrateur ajoutée à FastAPI, visible dans Swagger et absente du frontend. Protégée par `REGISTRATION_TOKEN`, car tout compte est administrateur. |
 | 2026-11-06 | FastAPI passe dans Docker en développement (`docker-compose.dev.yml`), à la place d'uvicorn lancé à la main. |
+| 2026-11-06 | Backend déployé en mode test sur le VPS (`docker-compose.vps.yml`, port 2560, sans Nginx ni HTTPS). Le VPS héberge d'autres sites et `profil.mg` n'existe pas encore : frontend et domaine restent à faire. |
+| 2026-11-06 | Frontend prévu sur Vercel : le navigateur passe par `/backend`, transmis à `BACKEND_URL`, car une page HTTPS ne peut pas appeler une API HTTP. |
+| 2026-11-06 | Frontend déployé sur `frontend-profilelink.vercel.app`, relié au backend de test du VPS. Parcours complet vérifié en production. |
+| 2026-11-06 | Routes renforcées : session validée par `proxy.ts`, `/backend` en liste blanche, identifiants retirés du JSON public et des URL du dashboard. |
+| 2026-11-06 | Compteur de clics : un clic par personne et par VA, même IP ou même navigateur. Mesuré en production : le VPS voit la vraie IP à travers Vercel. |
 | 2026-11-06 | Base de développement `profilelink_va` créée : la migration `0002` a refusé `profilelink`, qui contenait un compte de test, conservé. |

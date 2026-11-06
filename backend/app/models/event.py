@@ -12,6 +12,8 @@ class ClickEvent(Base):
     __table_args__ = (
         Index("ix_click_events_profile_time", "va_profile_id", text("clicked_at DESC")),
         Index("ix_click_events_time", text("clicked_at DESC")),
+        Index("ix_click_events_va_ip", "va_profile_id", "ip_hash"),
+        Index("ix_click_events_va_visitor", "va_profile_id", "visitor_hash"),
     )
 
     id: Mapped[UuidPk]
@@ -20,6 +22,7 @@ class ClickEvent(Base):
     referer_domain: Mapped[str | None] = mapped_column(String(253))
     user_agent: Mapped[str | None] = mapped_column(Text)
     ip_hash: Mapped[str | None] = mapped_column(CHAR(64))
+    visitor_hash: Mapped[str | None] = mapped_column(CHAR(64))
 
 
 class ProfileVisit(Base):

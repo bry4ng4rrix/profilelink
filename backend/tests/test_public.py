@@ -9,7 +9,6 @@ from tests.conftest import ADMIN, DESTINATION, INSTAGRAM, create_va
 
 PROFILE = "/api/v1/public/profiles/bryan"
 PUBLIC_FIELDS = {
-    "id",
     "username",
     "first_name",
     "last_name",
@@ -65,6 +64,12 @@ async def test_disabled_va_exposes_nothing_personal(admin, visitor):
     assert body["is_active"] is False and body["link_available"] is False
     for field in ("first_name", "last_name", "age", "photo_url"):
         assert body[field] is None, field
+
+
+async def test_the_internal_id_stays_private(admin, visitor):
+    va = await create_va(admin)
+
+    assert va["id"] not in (await visitor.get(PROFILE)).text
 
 
 async def test_neither_link_reaches_the_public_json(admin, visitor):

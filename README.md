@@ -37,9 +37,8 @@ API_PUBLIC_URL=http://localhost:8000
 `frontend/.env.local` :
 
 ```bash
-NEXT_PUBLIC_API_URL=http://localhost:8000
+BACKEND_URL=http://localhost:8000
 NEXT_PUBLIC_SITE_URL=http://localhost:3000
-API_INTERNAL_URL=http://localhost:8000
 REVALIDATE_SECRET=<la même valeur>
 ```
 

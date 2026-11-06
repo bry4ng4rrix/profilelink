@@ -10,7 +10,7 @@ MAX_LENGTH = 30
 # Every first-level route of the site must be listed here, or a profile could shadow it.
 RESERVED_USERNAMES = frozenset(
     {
-        "about", "admin", "api", "conditions", "contact", "dashboard", "help", "login",
+        "about", "admin", "api", "backend", "conditions", "contact", "dashboard", "help", "login",
         "media", "privacy", "profil", "profilelink", "register", "settings", "static",
         "support", "terms", "www",
     }

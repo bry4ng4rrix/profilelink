@@ -1,6 +1,6 @@
 # Schéma de base de données — ProfileLink
 
-> **Statut : implémenté, migrations `0001` à `0003`.**
+> **Statut : implémenté, migrations `0001` à `0004`.**
 > PostgreSQL 18, SQLAlchemy 2.x async, migrations Alembic uniquement.
 
 ## Diagramme
@@ -68,7 +68,7 @@ Seul le SHA-256 du jeton est stocké. Les sessions expirées sont purgées à ch
 - `username` est généré à la création puis figé.
 - `instagram_url` est privé : il n'est lu que par les endpoints `/admin/*`. Il n'est pas unique (A11).
 - La regex exclut les points et le `_` initial : `robots.txt` ou `_next` ne peuvent pas être des usernames.
-- Les noms réservés sont vérifiés dans l'application : `about`, `admin`, `api`, `conditions`, `contact`, `dashboard`, `help`, `login`, `media`, `privacy`, `profil`, `profilelink`, `register`, `settings`, `static`, `support`, `terms`, `www`.
+- Les noms réservés sont vérifiés dans l'application : `about`, `admin`, `api`, `backend`, `conditions`, `contact`, `dashboard`, `help`, `login`, `media`, `privacy`, `profil`, `profilelink`, `register`, `settings`, `static`, `support`, `terms`, `www`.
 
 ### `va_external_links`
 
@@ -93,6 +93,7 @@ C'est le seul stockage de la destination. Cette table n'est lue que par `/r/{use
 | `referer_domain` | VARCHAR(253) | Domaine seul, sans chemin |
 | `user_agent` | TEXT | Tronqué à 512 caractères par l'application |
 | `ip_hash` | CHAR(64) | HMAC-SHA256 |
+| `visitor_hash` | CHAR(64) | SHA-256 du cookie `pl_visitor` |
 
 ### `profile_visits`
 
@@ -115,6 +116,8 @@ Les contraintes `UNIQUE` créent déjà leurs index. S'y ajoutent :
 |---|---|---|
 | `ix_click_events_profile_time` | `(va_profile_id, clicked_at DESC)` | Statistiques par VA |
 | `ix_click_events_time` | `(clicked_at DESC)` | Statistiques globales |
+| `ix_click_events_va_ip` | `(va_profile_id, ip_hash)` | Un clic par IP et par VA |
+| `ix_click_events_va_visitor` | `(va_profile_id, visitor_hash)` | Un clic par navigateur et par VA |
 | `ix_profile_visits_profile_time` | `(va_profile_id, visited_at DESC)` | Statistiques par VA |
 | `ix_profile_visits_time` | `(visited_at DESC)` | Statistiques globales |
 | `ix_sessions_user_id` | `(user_id)` | Révocation |
@@ -155,6 +158,10 @@ Règles générales :
 ## Migration `0003`
 
 Remplace `email` par `instagram_url` dans `va_profiles`. Elle s'arrête si la table contient des lignes dans un sens comme dans l'autre, car l'une des valeurs ne peut pas être déduite de l'autre.
+
+## Migration `0004`
+
+Ajoute `visitor_hash` et les deux index de dédoublonnage. Elle ne touche à aucune donnée : les clics existants gardent `visitor_hash` à `NULL` et continuent de compter par IP.
 
 ## Statistiques
 

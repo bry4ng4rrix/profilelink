@@ -6,11 +6,17 @@ from app.core.db import SessionLocal
 from app.models import ClickEvent, ProfileVisit, VaProfile
 from app.services import revalidate
 from app.services.analytics import LOCAL_TZ
-from tests.conftest import ADMIN, create_va
+from tests.conftest import ADMIN, client, create_va
 
 OVERVIEW = "/api/v1/admin/analytics/overview"
 CLICKS = "/api/v1/admin/analytics/clicks"
 VISITS = "/api/v1/admin/analytics/visits"
+
+
+async def click_from(ip: str, username: str = "bryan") -> None:
+    """Another person: another address, and a browser with no cookie yet."""
+    async with client() as person:
+        await person.get(f"/r/{username}", headers={"X-Real-IP": ip})
 
 
 async def first_va_id():
@@ -65,9 +71,9 @@ async def test_overview_covers_all_vas(admin, visitor):
 async def test_statistics_can_be_scoped_to_one_va(admin, visitor):
     bryan = await create_va(admin, first_name="Bryan")
     marie = await create_va(admin, first_name="Marie")
-    await visitor.get("/r/bryan")
-    await visitor.get("/r/bryan")
-    await visitor.get("/r/marie")
+    await click_from("198.51.100.1")
+    await click_from("198.51.100.2")
+    await click_from("198.51.100.3", "marie")
 
     every = (await admin.get(OVERVIEW)).json()
     only_marie = (await admin.get(f"{OVERVIEW}?va_id={marie['id']}")).json()
@@ -83,8 +89,8 @@ async def test_statistics_can_be_scoped_to_one_va(admin, visitor):
 async def test_conversion_rate_is_not_clamped(admin, visitor):
     await create_va(admin)
     await visitor.post("/api/v1/public/profiles/bryan/visit")
-    await visitor.get("/r/bryan")
-    await visitor.get("/r/bryan")
+    await click_from("198.51.100.1")
+    await click_from("198.51.100.2")
 
     assert (await admin.get(OVERVIEW)).json()["conversion_rate"] == 2.0
 

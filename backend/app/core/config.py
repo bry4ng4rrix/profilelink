@@ -21,6 +21,12 @@ class Settings(BaseSettings):
     media_dir: Path = Path("media")
     registration_token: str | None = None  # empty: the /register page does not exist
 
+    @field_validator("frontend_origin", "frontend_internal_url", "api_public_url")
+    @classmethod
+    def _no_trailing_slash(cls, value: str) -> str:
+        # Browsers send Origin without it: a trailing slash would refuse every login.
+        return value.rstrip("/")
+
     @field_validator("registration_token")
     @classmethod
     def _strong_or_empty(cls, value: str | None) -> str | None:

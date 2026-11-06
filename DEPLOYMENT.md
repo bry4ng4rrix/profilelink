@@ -112,7 +112,7 @@ git pull
 docker compose up -d --build --wait
 ```
 
-`NEXT_PUBLIC_API_URL` étant compilée dans le frontend, changer `API_PUBLIC_URL` ou `FRONTEND_ORIGIN` impose un `--build`.
+`BACKEND_URL` et `NEXT_PUBLIC_SITE_URL` étant compilées dans le frontend, changer `FRONTEND_ORIGIN` impose un `--build`.
 
 ## 9. Opérations courantes
 
@@ -127,3 +127,34 @@ docker compose logs -f backend nginx
 scripts/update-cloudflare-ips.sh
 docker compose exec nginx nginx -s reload
 ```
+
+## Mode test sur un VPS partagé
+
+`docker-compose.vps.yml` lance FastAPI et PostgreSQL seuls, sans Nginx, sur le port 2560. Il convient à un VPS qui héberge déjà d'autres sites, car il ne touche pas aux ports 80 et 443.
+
+```bash
+cd ~/profilelink
+docker compose -f docker-compose.vps.yml up -d --build --wait
+```
+
+Le `.env` du VPS doit contenir `ENVIRONMENT=development`, `API_PUBLIC_URL=http://<IP>:2560`, `POSTGRES_USER`, `POSTGRES_DB` et `POSTGRES_PASSWORD`, sans `DATABASE_URL`.
+
+**Réservé aux tests.** Ce mode n'a pas de HTTPS, ni de rate limiting, et Swagger y est public. Un visiteur peut aussi fausser l'IP enregistrée dans les statistiques. Laissez `REGISTRATION_TOKEN` vide dès que les comptes sont créés, puis relancez la commande ci-dessus.
+
+## Frontend sur Vercel
+
+Importez le dépôt `frontend_profilelink`. L'adresse de l'API est `BACKEND_URL`, avec le VPS de test pour valeur par défaut dans `frontend/lib/site.ts`.
+
+Le navigateur passe par `/backend` sur Vercel, qui transmet à l'API : tout reste en HTTPS pour lui, même si l'API est en HTTP.
+
+Dans Vercel, ajoutez `REVALIDATE_SECRET`, identique à celui du VPS. Sans lui, une modification met jusqu'à 5 minutes à apparaître.
+
+Dans le `.env` du VPS, avec votre adresse Vercel :
+
+```bash
+FRONTEND_ORIGIN=https://<projet>.vercel.app
+FRONTEND_INTERNAL_URL=https://<projet>.vercel.app
+API_PUBLIC_URL=https://<projet>.vercel.app/backend
+```
+
+Relancez ensuite le backend. Tant que `FRONTEND_ORIGIN` ne correspond pas, la connexion est refusée (`origin_not_allowed`).

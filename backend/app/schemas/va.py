@@ -11,9 +11,8 @@ Age = Annotated[int, Field(ge=1, le=120)]
 
 
 class PublicProfileOut(BaseModel):
-    """Allow-list of what a visitor may see. Never add a link or admin data here."""
+    """Allow-list of what a visitor may see. Never add a link, an id or admin data here."""
 
-    id: UUID
     username: str
     first_name: str | None
     last_name: str | None
