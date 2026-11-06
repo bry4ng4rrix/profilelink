@@ -13,7 +13,7 @@
 | 6 | Refonte administrateur/VA | Développée et testée, **pas déployée** |
 
 Les phases 2 à 5 ont été réalisées sur le modèle à inscription libre, remplacé par la phase 6.
-État des tests : 298 tests pytest, 70 tests Playwright.
+État des tests : 312 tests pytest, 70 tests Playwright.
 
 ## Phase 6 — Refonte administrateur/VA
 

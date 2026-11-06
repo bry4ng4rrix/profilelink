@@ -13,6 +13,7 @@ os.environ.update(
     ),
     IP_HASH_KEY="test-ip-key",
     REVALIDATE_SECRET="test-revalidate-secret",
+    REGISTRATION_TOKEN="",  # never inherited from the developer's .env
     FRONTEND_ORIGIN="https://profil.test",
     API_PUBLIC_URL="https://api.profil.test",
     MEDIA_DIR=tempfile.mkdtemp(prefix="profilelink-media-"),
